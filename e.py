@@ -1,38 +1,47 @@
 import cv2
-import socket
-import pickle
-import struct
+import imutils
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from socketserver import ThreadingMixIn
+import threading
 
-# Configura la dirección IP y el puerto para la transmisión
-host = '192.168.1.1'  # Cambia esto a la IP del receptor
-port = 12345
+class CamHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path.endswith('.mjpg'):
+            self.send_response(200)
+            self.send_header('Content-type', 'multipart/x-mixed-replace; boundary=--jpgboundary')
+            self.end_headers()
+            try:
+                while True:
+                    frame = get_frame()  # Función que captura un frame de la cámara
+                    if frame is not None:
+                        ret, jpg = cv2.imencode('.jpg', frame)
+                        self.wfile.write("--jpgboundary\r\n".encode())
+                        self.send_header('Content-type', 'image/jpeg')
+                        self.send_header('Content-length', str(jpg.size))
+                        self.end_headers()
+                        self.wfile.write(jpg.tobytes())
+                        self.wfile.write("\r\n".encode())
+            except KeyboardInterrupt:
+                pass
+        else:
+            self.send_response(400)
+            self.end_headers()
+            self.wfile.write("Only .mjpg supported.".encode())
 
-# Crea un socket del servidor
-server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server_socket.bind((host, port))
-server_socket.listen(1)
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    """This is an HTTPServer that supports thread-based concurrency."""
 
-print(f'Esperando conexión en {host}:{port}...')
+def get_frame():
+    # Esta función debe capturar y devolver un frame de la cámara frontal
+    # Puedes usar OpenCV para capturar la cámara
 
-# Acepta la conexión entrante
-client_socket, addr = server_socket.accept()
+def main():
+    try:
+        server = ThreadedHTTPServer(('0.0.0.0', 8080), CamHandler)
+        print("Server started on port 8080")
+        server.serve_forever()
+    except KeyboardInterrupt:
+        server.socket.close()
 
-# Abre la cámara frontal
-cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
-
-while True:
-    ret, frame = cap.read()
-
-    # Serializa el frame en formato pickle y luego en formato de bytes
-    data = pickle.dumps(frame)
-    message_size = struct.pack("L", len(data))
-
-    # Envía el tamaño del mensaje
-    client_socket.sendall(message_size)
-
-    # Envía el frame
-    client_socket.sendall(data)
-
-# Cierra la conexión y la cámara
-client_socket.close()
-cap.release()
+if __name__ == '__main__':
+    main()
