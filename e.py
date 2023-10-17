@@ -37,7 +37,7 @@ def get_frame():
 
 def main():
    try:
-       server = ThreadedHTTPServer(('0.0.0.0', 8080), CamHandler)
+       server = ThreadedHTTPServer(('192.168.0.102', 8080), CamHandler)
        print("Server started on port 8080")
        server.serve_forever()
    except KeyboardInterrupt:
